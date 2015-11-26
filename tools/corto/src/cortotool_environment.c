@@ -115,13 +115,13 @@ corto_int16 cortotool_activate(int argc, char *argv[]) {
     char* currentEnvironment = getenv("CORTO_ENVIRONMENT");
     if (currentEnvironment) {
         corto_error("environment %s already activate; use exit to deactivate the environment", currentEnvironment);
-        goto errorNoEnv;
+        goto errorHasEnvironment;
     }
+
     if (argc < 2) {
         corto_error("did not provide an environment name to activate");
         goto errorNoEnv;
     }
-
     char* name = argv[1];
     char* envPath = cortotool_environmentPath(name);
     if (!envPath) {
@@ -131,44 +131,28 @@ corto_int16 cortotool_activate(int argc, char *argv[]) {
         corto_error("environment %s does not exist", name);
         goto errorNotFound;
     }
-    
-    char* oldPrompt = corto_getenv("PS1");
-    char* newPrompt = NULL;
-    if (corto_asprintf(&newPrompt, "(%s) %s", name, oldPrompt) < 0) {
-        goto errorNotFound;
-    }
-    char* currentShell = corto_getenv("SHELL");
-    
+    corto_dealloc(envPath);
+
     corto_setenv("CORTO_ENVIRONMENT", name);
     corto_setenv("CORTO_HOME", "$HOME/.corto/env/$CORTO_ENVIRONMENT");
     corto_setenv("CORTO_TARGET", "$HOME/.corto/env/$CORTO_ENVIRONMENT");
     corto_setenv("CORTO_BUILD", "/usr/local/lib/corto/$CORTO_VERSION/build");
 
-
-    /* TODO corto_setenv("PS1", "($CORTO_ENVIRONMENT)$PS1") */
-    setenv("PS1", newPrompt, TRUE);
-
-    /* TODO corto_setenv("PATH", "$CORTO_HOME:$PATH") */
-    char* oldPath = getenv("PATH");
-    char* newPath = NULL;
-    if (corto_asprintf(&newPath, "%s:%s", getenv("CORTO_HOME"), oldPath) < 0) {
-        goto errorNewPath;
-    }
-    setenv("PATH", newPath, TRUE);
+    /* TODO this parses the string into NULL */
+    corto_setenv("PS1", "($CORTO_ENVIRONMENT) $PS1", TRUE);
+    /* TODO this segfaults */
+    corto_setenv("PATH", "$CORTO_HOME:$PATH");
     
+    char* currentShell = corto_getenv("SHELL");
     corto_pid pid = corto_procrun(currentShell, (char*[]){currentShell, NULL});
     corto_int8 procResult = 0;
-    corto_procwait(pid, &procResult);
 
-    corto_dealloc(newPath);
-    corto_dealloc(newPrompt);
-    corto_dealloc(envPath);
+    corto_procwait(pid, &procResult);
+    
     return 0;
-errorNewPath:
-    if (newPath) corto_dealloc(newPath);
-    if (newPrompt) corto_dealloc(newPrompt);
 errorNotFound:
     corto_dealloc(envPath);
+errorHasEnvironment:
 errorNoEnv:
     return -1;
 }
