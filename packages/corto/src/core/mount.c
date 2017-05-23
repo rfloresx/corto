@@ -194,7 +194,7 @@ int16_t _corto_mount_construct(
     if (ret) {
         corto_entityAdmin_remove(&corto_mount_admin, corto_subscriber(this)->parent, this, this, FALSE);
     }
-    
+
     return ret;
 error:
     return -1;
@@ -228,7 +228,7 @@ void _corto_mount_destruct(
     corto_subscriber_destruct(this);
 
     corto_assert(
-        corto_entityAdmin_remove(&corto_mount_admin, corto_subscriber(this)->parent, this, this, FALSE) != -1, 
+        corto_entityAdmin_remove(&corto_mount_admin, corto_subscriber(this)->parent, this, this, FALSE) != -1,
         "trying to remove mount that was never added to mountAdmin");
 
 /* $end */
@@ -315,27 +315,55 @@ void _corto_mount_onNotify_v(
 /* $end */
 }
 
+/* $header(corto/core/mount/onPoll) */
+static corto_equalityKind corto_event_compare(corto_type this, const void* o1, const void* o2) {
+    CORTO_UNUSED(this);
+    corto_equalityKind eq = CORTO_NEQ;
+    corto_int8 cmp = 0;
+    corto_event *e1 = o1;
+    corto_event *e2 = o2;
+
+    if (!(cmp = strcmp(e1->data.id, e2->data.id) &&
+        !(cmp = strcmp(e1->data.parent, e2->data.id) &&
+        !(cmp = (e1->subscriber - e2->subscriber))
+    {
+        return CORTO_EQ;
+    }
+
+    if (cmp < 0) {
+        eq = CORTO_LT;
+    } else if (cmp > 0) {
+        eq = CORTO_GT;
+    }
+
+    return eq;
+}
+
+
+/* $end */
 void _corto_mount_onPoll_v(
     corto_mount this)
 {
 /* $begin(corto/core/mount/onPoll) */
     corto_event *e;
-    corto_ll events = corto_ll_new();
+    corto_rbtree newEvents = corto_rb_new(corto_event_compare);
 
     /* Collect events */
     corto_lock(this);
-    while ((e = corto_ll_takeFirst(this->events))) {
-        corto_ll_append(events, e);
-    }
+    corto_rbtree events = this->events;
+    this->events = newEvents;
     corto_unlock(this);
 
     /* Handle events outside of lock */
-    while ((e = corto_ll_takeFirst(events))) {
+    corto_iter iter = corto_rb_iter(events);
+    while (corto_iter_hasNext(&iter))
+    {
+        e = corto_iter_next(&iter);
         corto_event_handle(e);
         corto_assert(corto_release(e) == 0);
     }
 
-    corto_ll_free(events);
+    corto_rb_free(events);
 /* $end */
 }
 
@@ -448,6 +476,8 @@ void _corto_mount_post(
 
         /* Check if there is already another event in the queue for the same object.
          * if so, replace event with latest update. */
+         corto_rb_set(this->event, this->event);
+
         if ((e2 = corto_mount_findEvent(this, corto_subscriberEvent(e)))) {
             corto_ll_replace(this->events, e2, e);
             if (e2->event & CORTO_ON_DECLARE) this->sentDiscarded.declares++;
@@ -514,7 +544,7 @@ corto_object _corto_mount_resume(
     if (this->kind != CORTO_SINK) {
         return NULL;
     }
-    
+
     /* Ensure that if object is created, owner & attributes are set correctly */
     corto_attr prevAttr = corto_setAttr(CORTO_ATTR_PERSISTENT | corto_getAttr());
     corto_object prevOwner = corto_setOwner(this);
