@@ -61,9 +61,7 @@ else
 end
 
 if not defined? PREFIX then
-  if LANGUAGE == "cpp" or LANGUAGE == "c++" then
-    PREFIX = "."
-  elsif defined? PP_SCOPES then
+  if defined? PP_SCOPES then
     PREFIX = PP_SCOPES[0].split("/").last
   end
 end
@@ -72,7 +70,9 @@ end
 if TARGET != "corto" and NOCORTO == false then
   USE_PACKAGE << "corto"
   if LANGUAGE == "cpp" or LANGUAGE == "c++" then
-    USE_PACKAGE << "corto/cpp"
+    if not NOAPI then 
+      USE_PACKAGE << "corto/cpp"
+    end
   elsif LANGUAGE == "c" or LANGUAGE == "c4cpp" then
     if not NOAPI then
       USE_PACKAGE << "corto/c"
@@ -143,17 +143,27 @@ if NOCORTO == false then
       end
     else
       GENERATED_SOURCES <<
-        ".corto/_api.#{EXT}" <<
+        ".corto/_wrapper.#{EXT}" <<
         ".corto/_project.#{EXT}" <<
         ".corto/_load.#{EXT}"
 
       GENERATED_HEADERS <<
         "include/_load.h" <<
-        "include/_type.h"
+        "include/_type.h" <<
+        "include/_project.h"
+      
+      if LOCAL == true or APP == true then
+        GENERATED_SOURCES << ".corto/_api.#{EXT}"
+        GENERATED_HEADERS << "include/_api.h"
+      end
     end
 
-    if not LOCAL and not APP and not USE_PACKAGE.include? PACKAGE + "/c" then
-      USE_PACKAGE << PACKAGE + "/c"
+    if not LOCAL and not APP  then
+      if ( LANGUAGE == "c" or LANGUAGE == "c4cpp" ) and not USE_PACKAGE.include? PACKAGE + "/c" then
+        USE_PACKAGE << PACKAGE + "/c"
+      elsif ( LANGUAGE == "cpp" or LANGUAGE == "c++" ) and not USE_PACKAGE.include? PACKAGE + "/cpp" then 
+        USE_PACKAGE << PACKAGE + "/cpp"
+      end 
     end
 
     file "include/_type.h" => [GENFILE, ".corto/packages.txt"] do
